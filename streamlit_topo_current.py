@@ -157,7 +157,7 @@ with c1:
     zoom_buffer = st.slider("**Zoom out**", 0.10, 1.00, 0.35, 0.05,
                             help="Higher = more area shown around the site")
 with c2:
-    collar_trim = st.slider("**Collar trim**", 0.000, 0.010, 0.0045, 0.0005,
+    collar_trim = st.slider("**Collar trim**", 0.000, 0.010, 0.000, 0.0005,
                             format="%.4f",
                             help="How much white quad border to crop when "
                                  "mosaicking. Increase if white edges show; "
