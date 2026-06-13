@@ -1,0 +1,9 @@
+streamlit
+requests
+numpy
+rasterio
+pyproj
+Pillow
+python-docx
+shapely
+lxml
