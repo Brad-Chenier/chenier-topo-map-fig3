@@ -152,6 +152,17 @@ st.markdown("---")
 uploaded = st.file_uploader("**1. Upload site boundary (KMZ or KML)**", type=['kmz','kml'])
 project_no = st.text_input("**2. Project number**", placeholder="e.g. 26-014")
 
+c1, c2 = st.columns(2)
+with c1:
+    zoom_buffer = st.slider("**Zoom out**", 0.10, 1.00, 0.35, 0.05,
+                            help="Higher = more area shown around the site")
+with c2:
+    collar_trim = st.slider("**Collar trim**", 0.000, 0.010, 0.0045, 0.0005,
+                            format="%.4f",
+                            help="How much white quad border to crop when "
+                                 "mosaicking. Increase if white edges show; "
+                                 "decrease if real map content gets cut off.")
+
 generate = st.button("⚡ Generate Current Topographic Map", type="primary", use_container_width=True)
 
 if generate:
@@ -190,7 +201,7 @@ if generate:
                 groups = core.group_adjacent_quads(latest_items, bounds)
                 grp = groups[0]  # the group covering the site
 
-                cb = core.clip_bounds(bounds)
+                cb = core.clip_bounds(bounds, buffer_factor=zoom_buffer)
                 tmp = work / "_tmp"; tmp.mkdir(exist_ok=True)
 
                 metas = [core.parse_meta(i) for i in grp]
@@ -209,7 +220,8 @@ if generate:
 
                 st.write("Rendering map...")
                 jpg = tmp / "fig3.jpg"
-                if not core.render_group(tif_paths, site_geom, cb, jpg, items=grp):
+                if not core.render_group(tif_paths, site_geom, cb, jpg,
+                                         items=grp, collar_shrink=collar_trim):
                     status.update(label="Render failed", state="error")
                     st.error("Could not render the map.")
                     st.stop()

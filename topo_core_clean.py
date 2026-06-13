@@ -54,6 +54,11 @@ USGS_HEADERS   = {
 OVERLAY_URL    = 'https://raw.githubusercontent.com/Brad-Chenier/chenier-data/main/USGS_Topo_Overlay_Data_new.geojson'
 BUFFER_FACTOR  = 0.35
 MIN_BUFFER     = 0.04
+# How far (in degrees) to crop inward from each quad's declared map-sheet
+# boundingBox before mosaicking. The TNM boundingBox is the full sheet
+# including the white collar/margin, so we must crop past it to the neat-line
+# (actual map content). ~0.0045 deg ≈ 0.5 km, which clears a 7.5' quad collar.
+COLLAR_SHRINK_DEG = 0.0045
 SITE_COLOR     = (255, 0, 0)  # red boundary
 IMG_W_PX       = 1125   # 7.5" x 150 DPI
 IMG_H_PX       = 1275   # 8.5" x 150 DPI
@@ -614,10 +619,11 @@ def group_adjacent_quads(items, site_bounds):
     return result
 
 
-def clip_bounds(b):
+def clip_bounds(b, buffer_factor=None):
     x0,y0,x1,y1 = b
-    bx = max((x1-x0)*BUFFER_FACTOR, MIN_BUFFER)
-    by = max((y1-y0)*BUFFER_FACTOR, MIN_BUFFER)
+    bf = BUFFER_FACTOR if buffer_factor is None else buffer_factor
+    bx = max((x1-x0)*bf, MIN_BUFFER)
+    by = max((y1-y0)*bf, MIN_BUFFER)
     return (x0-bx, y0-by, x1+bx, y1+by)
 
 
@@ -635,15 +641,18 @@ def download_tif(url, dest):
     print()
 
 
-def render_group(tif_paths, site_geom, clip_wgs84, out_jpg, items=None):
+def render_group(tif_paths, site_geom, clip_wgs84, out_jpg, items=None,
+                 collar_shrink=None):
     """
     Render one or more GeoTIFFs (adjacent quads) into a single clipped JPEG.
     If multiple TIFs, mosaics them first then clips.
+    collar_shrink: degrees to crop inward from each quad bbox (collar removal).
     """
     if len(tif_paths) == 1:
         return render_single(tif_paths[0], site_geom, clip_wgs84, out_jpg)
     else:
-        return render_mosaic(tif_paths, site_geom, clip_wgs84, out_jpg, items=items)
+        return render_mosaic(tif_paths, site_geom, clip_wgs84, out_jpg,
+                             items=items, collar_shrink=collar_shrink)
 
 
 def render_single(tif_path, site_geom, clip_wgs84, out_jpg):
@@ -652,9 +661,11 @@ def render_single(tif_path, site_geom, clip_wgs84, out_jpg):
 
 
 
-def render_mosaic(tif_paths, site_geom, clip_wgs84, out_jpg, items=None):
+def render_mosaic(tif_paths, site_geom, clip_wgs84, out_jpg, items=None,
+                  collar_shrink=None):
     """Mosaic adjacent quads, clipping each to its declared bbox before merging."""
-    print(f"    Mosaicking {len(tif_paths)} adjacent quads...")
+    shrink_deg = COLLAR_SHRINK_DEG if collar_shrink is None else collar_shrink
+    print(f"    Mosaicking {len(tif_paths)} adjacent quads... (collar shrink {shrink_deg} deg)")
     datasets       = []
     reproj_paths   = []
     collar_paths   = []
@@ -678,8 +689,10 @@ def render_mosaic(tif_paths, site_geom, clip_wgs84, out_jpg, items=None):
                 t_fwd = Transformer.from_crs('EPSG:4326', ds.crs, always_xy=True)
                 qx0, qy0 = t_fwd.transform(quad_bbox[0], quad_bbox[1])
                 qx1, qy1 = t_fwd.transform(quad_bbox[2], quad_bbox[3])
-                # Shrink very slightly to avoid picking up collar edge pixels
-                shrink = 0.001  # degrees
+                # Shrink inward to crop past the collar to the neat-line.
+                # The TNM boundingBox is the full sheet (with white collar), so
+                # this must be large enough to reach actual map content.
+                shrink = shrink_deg  # degrees (tunable per call)
                 t2     = Transformer.from_crs('EPSG:4326', ds.crs, always_xy=True)
                 sx0, sy0 = t2.transform(quad_bbox[0]+shrink, quad_bbox[1]+shrink)
                 sx1, sy1 = t2.transform(quad_bbox[2]-shrink, quad_bbox[3]-shrink)
